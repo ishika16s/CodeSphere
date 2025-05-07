@@ -1,0 +1,65 @@
+// --- BACKEND: app.js ---
+const express = require("express");
+const mongoose = require("mongoose");
+const authRoutes = require("./routes/authRoutes");
+const repoRoutes = require("./routes/repoRoutes");
+const cors = require("cors");
+require("dotenv").config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+});
+
+app.use("/api/auth", authRoutes);
+app.use("/api/repos", repoRoutes);
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(Server running on port ${PORT}));
+
+// --- BACKEND: models/User.js ---
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+
+const userSchema = new mongoose.Schema({
+  username: { type: String, unique: true },
+  password: { type: String }
+});
+
+userSchema.pre("save", async function(next) {
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+module.exports = mongoose.model("User", userSchema);
+
+// --- BACKEND: routes/authRoutes.js ---
+const express = require("express");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+const User = require("../models/User");
+
+const router = express.Router();
+
+router.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.create({ username, password });
+  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+  res.json({ token });
+});
+
+router.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user || !(await bcrypt.compare(password, user.password)))
+    return res.status(401).json({ message: "Invalid credentials" });
+
+  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+  res.json({ token });
+});
+
+module.exports = router;
